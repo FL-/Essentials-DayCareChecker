@@ -2,7 +2,7 @@
 # * One screen Day-Care Checker item - by FL (Credits will be apreciated)
 #===============================================================================
 #
-# This script is for Pokémon Essentials. It makes a One screen Day-Care Checker
+# This script is for Pokémon Essentials. It makes an One screen Day-Care Checker
 # (like in DPP) activated by item. This display the pokémon sprite, names,
 # levels, genders and if them generate an egg.
 #
@@ -126,7 +126,7 @@ end
 
 # Item handlers
 
-ItemHandlers.addUseFromBag(DCCITEM, proc {|item|
+ItemHandlers::UseInField.add(DCCITEM,proc { |item|
   pbFadeOutIn(99999){
     scene=DayCareCheckerScene.new
     screen=DayCareChecker.new(scene)
@@ -135,7 +135,7 @@ ItemHandlers.addUseFromBag(DCCITEM, proc {|item|
   next 1 # Continue
 })
 
-ItemHandlers.addUseInField(DCCITEM, proc {|item|
+ItemHandlers::UseFromBag.add(DCCITEM,proc { |item|
   pbFadeOutIn(99999){
     scene=DayCareCheckerScene.new
     screen=DayCareChecker.new(scene)
