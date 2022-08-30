@@ -1,145 +1,229 @@
 #===============================================================================
-# * One screen Day-Care Checker item - by FL (Credits will be apreciated)
+# * Single Screen Day-Care Checker Item - by FL (Credits will be apreciated)
 #===============================================================================
 #
-# This script is for Pokémon Essentials. It makes an One screen Day-Care Checker
-# (like in DPP) activated by item. This display the pokémon sprite, names,
-# levels, genders and if them generate an egg.
+# This script is for Pokémon Essentials. It makes a single screen Day-Care 
+# Checker (like in DPP Pokétch) activated by item. This displays the pokémon
+# sprites, names, levels, genders and if they generated an egg.
 #
-#===============================================================================
+#== INSTALLATION ===============================================================
 #
-# To this script works, put it above main, put a 480x320 background in
-# DCCBACKPATH location and, like any item, you need to add in the "items.txt"
-# and in the script. There an example below using the name DAYCARESIGHT, but
-# you can use any other name changing the DCCITEM and the item that be added in
-# txt. You can change the internal number too:
+# To this script works, put it above main OR convert into a plugin. Put a 
+# 512x384 background in "Graphics/Pictures/day_care_checker_bg" and add into
+# PBS\items.txt:
 #
-# 631,DAYCARESIGHT,DayCare Sight,DayCare Sight,8,0,"A visor that can be use for see certains Pokémon in Day-Care to monitor their growth.",2,0,6
+# In Essentials version 20 or above:
+#
+#  [DAYCARESIGHT]
+#  Name = Day-Care Sight
+#  NamePlural = Day-Care Sights
+#  Pocket = 8
+#  Price = 0
+#  FieldUse = Direct
+#  Flags = KeyItem
+#  Description = A visor that can be use to see Pokémon in Day-Care to monitor their growth.
+#
+# In v16.2-v19.1:
+#
+#  631,DAYCARESIGHT,Day-Care Sight,Day-Care Sights,8,0,"A visor that can be use to see Pokémon in Day-Care to monitor their growth.",2,0,6
+#
+# In v15 or below:
+#
+#  631,DAYCARESIGHT,DayCare Sight,8,0,"A visor that can be use to see Pokémon in Day-Care to monitor their growth.",2,0,6
 #
 #===============================================================================
 
-DCCITEM=:DAYCARESIGHT # Change this and the item.txt if you wish another name
-DCCBACKPATH= "Graphics/Pictures/dccbackground" # You can change if you wish
-
-class DayCareCheckerScene 
-
-def startScene
-  @sprites={}
-  @viewport=Viewport.new(0,0,Graphics.width,Graphics.height)
-  @viewport.z=99999
-  @pkmn1=$PokemonGlobal.daycare[0][0]
-  @pkmn2=$PokemonGlobal.daycare[1][0]
-  # If you wish that if there only one pokémon, it became right
-  # positioned, them uncomment the four below lines
-  #if !@pkmn1 && @pkmn2
-  #  @pkmn1=@pkmn2
-  #  @pkmn2=nil
-  #end
-  textPositions=[]
-  baseColor=Color.new(12*8,12*8,12*8)
-  shadowColor=Color.new(26*8,26*8,25*8)
-  @sprites["background"]=IconSprite.new(0,0,@viewport)
-  @sprites["background"].setBitmap(DCCBACKPATH)
-  pokemonx = 104
-  pokemony=Graphics.height/2+32
-  if @pkmn1
-    @sprites["pokemon1"]=PokemonSprite.new(@viewport)
-    @sprites["pokemon1"].setPokemonBitmap(@pkmn1)
-    @sprites["pokemon1"].mirror=true
-    @sprites["pokemon1"].setOffset(PictureOrigin::Center)
-    @sprites["pokemon1"].x = pokemonx
-    @sprites["pokemon1"].y = pokemony
-    textPositions.push([_INTL("{1} Lv{2}{3}",@pkmn1.name,@pkmn1.level.to_s,
-        genderString(@pkmn1.gender)),32,44,false,baseColor,shadowColor])
-  end
-  if @pkmn2
-    @sprites["pokemon2"]=PokemonSprite.new(@viewport)
-    @sprites["pokemon2"].setPokemonBitmap(@pkmn2)
-    @sprites["pokemon2"].setOffset(PictureOrigin::Center)
-    @sprites["pokemon2"].x = Graphics.width-pokemonx
-    @sprites["pokemon2"].y = pokemony
-    textPositions.push([_INTL("{1} Lv{2}{3}",@pkmn2.name,@pkmn2.level.to_s,
-        genderString(@pkmn2.gender)),Graphics.width-16,44,true,baseColor,
-        shadowColor])
-  end
-  if Kernel.pbEggGenerated?
-    @sprites["egg"]=IconSprite.new(Graphics.width/2,pokemony-32,@viewport)
-    @sprites["egg"].setBitmap("Graphics/Battlers/egg")
-    # To works with different egg sprite sizes
-    @sprites["egg"].x-=(@sprites["egg"].bitmap.width/2)
-    # Uncomment the below line to only a egg shadow be show
-    #@sprites["egg"].color=Color.new(0,0,0,255) 
-  end
-  @sprites["overlay"]=Sprite.new(@viewport)
-  @sprites["overlay"].bitmap=BitmapWrapper.new(Graphics.width,Graphics.height)
-  pbSetSystemFont(@sprites["overlay"].bitmap)
-  if !textPositions.empty?
-    pbDrawTextPositions(@sprites["overlay"].bitmap,textPositions)
-  end
-  pbFadeInAndShow(@sprites) { update }
+if defined?(PluginManager) && !PluginManager.installed?("Day-Care Checker Item")
+  PluginManager.register({                                                 
+    :name    => "Day-Care Checker Item",                                        
+    :version => "1.1",                                                     
+    :link    => "https://www.pokecommunity.com/showthread.php?t=278209",             
+    :credits => "FL"
+  })
 end
 
-def genderString(gender)
-  ret="  "
-  if gender==0
-    ret=" ♂"
-  elsif gender==1
-    ret=" ♀"
-  end
-  return ret
-end 
+module DayCareChecker
+  # Item ID
+  ITEM = :DAYCARESIGHT
 
-def middleScene
-  loop do
-    Graphics.update
-    Input.update
-    self.update
-    if Input.trigger?(Input::B) || Input.trigger?(Input::C)
-      break
+  # When true and there are only one pokémon, it is always on the left.
+  FORCE_LEFT = false
+
+  # When true, only an egg shadow will be show.
+  EGG_SHADOW = false
+
+  def self.display
+    pbFadeOutIn(99999){
+      scene=Scene.new
+      screen=Screen.new(scene)
+      screen.start_screen
+    }
+  end
+
+  class Scene
+    def start_scene
+      @sprites={}
+      @viewport=Viewport.new(0,0,Graphics.width,Graphics.height)
+      @viewport.z=99999
+      @pokemon_array = [Bridge.day_care_pokemon(0),Bridge.day_care_pokemon(1)]
+      sprite_y = Graphics.height/2+32
+      if FORCE_LEFT && !@pokemon_array[0] && @pokemon_array[1]
+        @pokemon_array.delete_at(0)
+      end
+      text_positions=[]
+      @sprites["overlay"]=Sprite.new(@viewport)
+      @sprites["overlay"].bitmap=BitmapWrapper.new(Graphics.width,Graphics.height)
+      @sprites["overlay"].z = 1
+      pbSetSystemFont(@sprites["overlay"].bitmap)
+      @sprites["background"]=IconSprite.new(0,0,@viewport)
+      @sprites["background"].setBitmap("Graphics/Pictures/day_care_checker_bg")
+      @sprites["background"].x = (
+        Graphics.width-@sprites["background"].bitmap.width
+      )/2
+      @sprites["background"].y = (
+        Graphics.height-@sprites["background"].bitmap.height
+      )/2
+      for i in 0...2
+        draw_pokemon(i, sprite_y, text_positions) if @pokemon_array[i]
+      end
+      draw_egg(sprite_y) if Bridge.day_care_has_egg?
+      if !text_positions.empty?
+        Bridge.draw_text_positions(@sprites["overlay"].bitmap,text_positions)
+      end
+      pbFadeInAndShow(@sprites) { update }
+    end
+
+    def draw_pokemon(i,y,text_positions)
+      @sprites["pokemon#{i}"]=PokemonSprite.new(@viewport)
+      @sprites["pokemon#{i}"].setPokemonBitmap(@pokemon_array[i])
+      @sprites["pokemon#{i}"].mirror=true if i==0
+      set_center_offset(@sprites["pokemon#{i}"])
+      @sprites["pokemon#{i}"].x = i==0 ? 104 : Graphics.width-104
+      @sprites["pokemon#{i}"].y = y
+      assing_pokemon_text(
+        i, _INTL("{1} Lv{2}",@pokemon_array[i].name,@pokemon_array[i].level), 
+        @pokemon_array[i].gender, 20, 50, text_positions
+      )
+    end
+
+    def assing_pokemon_text(i, text, gender, x_padding, y, text_positions)
+      text_positions.push([
+        text, text_x(i, gender, x_padding),
+        y, i==1, Color.new(96, 96, 96),Color.new(168,184,184)
+      ])
+      if @pokemon_array[i].gender != 2
+        gender_text_size = @sprites["overlay"].bitmap.text_size(text).width
+        text_positions.push([
+          gender==0 ? "♂" : "♀", 
+          i==0 ? (x_padding+gender_text_size+8) : Graphics.width - x_padding, 
+          y, i==1,
+          gender==0 ? Color.new(0,128,248) : Color.new(248,24,24),
+          Color.new(168,184,184)
+        ])
+      end
+    end
+
+    def text_x(index, gender, padding)
+      ret = 0
+      if index==0
+        ret = padding
+      else
+        ret = Graphics.width - padding
+        ret-=20 if gender != 2
+      end
+      return ret
+    end
+
+    def draw_egg(y)
+      @sprites["egg"]=IconSprite.new(Graphics.width/2,y+48,@viewport)
+      @sprites["egg"].setBitmap(Bridge.egg_path)
+      set_center_offset(@sprites["egg"])
+      @sprites["egg"].color=Color.new(0,0,0,255) if EGG_SHADOW
+    end
+
+    def set_center_offset(sprite)
+      sprite.ox = sprite.bitmap.width/2 if sprite.bitmap
+      sprite.oy = sprite.bitmap.height/2 if sprite.bitmap
+    end
+
+    def main
+      loop do
+        Graphics.update
+        Input.update
+        self.update
+        if Input.trigger?(Input::B) || Input.trigger?(Input::C)
+          break
+        end
+      end
+    end
+
+    def update
+      pbUpdateSpriteHash(@sprites)
+    end
+
+    def end_scene
+      pbFadeOutAndHide(@sprites) { update }
+      pbDisposeSpriteHash(@sprites)
+      @viewport.dispose
+    end
+  end
+
+  class Screen
+    def initialize(scene)
+      @scene=scene
+    end
+
+    def start_screen
+      @scene.start_scene
+      @scene.main
+      @scene.end_scene
+    end
+  end
+
+  # Essentials multiversion layer
+  module Bridge
+    if defined?(Essentials)
+      MAJOR_VERSION = Essentials::VERSION.split(".")[0].to_i
+    else
+      MAJOR_VERSION = 0
+    end
+
+    module_function
+    
+    def draw_text_positions(bitmap,textpos)
+      if MAJOR_VERSION < 20
+        for single_text_pos in textpos
+          single_text_pos[2]-= MAJOR_VERSION==19 ? 12 : 6
+        end
+      end
+      return pbDrawTextPositions(bitmap,textpos)
+    end
+    
+    def egg_path
+       return "Graphics/Battlers/egg" if MAJOR_VERSION < 19
+       return "Graphics/Pokemon/Eggs/000"
+    end
+
+    def day_care_pokemon(index)
+      return $PokemonGlobal.daycare[index][0] if MAJOR_VERSION < 20
+      return nil if !$PokemonGlobal.day_care.slots[index]
+      return $PokemonGlobal.day_care.slots[index].pokemon
+    end
+
+    def day_care_has_egg?
+      return Kernel.pbEggGenerated? if MAJOR_VERSION < 20
+      return DayCare.egg_generated?
     end
   end
 end
 
-def update
-  pbUpdateSpriteHash(@sprites)
-end
 
-def endScene
-  pbFadeOutAndHide(@sprites) { update }
-  pbDisposeSpriteHash(@sprites)
-  @viewport.dispose
-end
-end
-
-class DayCareChecker
-
-def initialize(scene)
-  @scene=scene
-end
-
-def startScreen
-  @scene.startScene
-  @scene.middleScene
-  @scene.endScene
-end
-end
-
-# Item handlers
-
-ItemHandlers::UseInField.add(DCCITEM,proc { |item|
-  pbFadeOutIn(99999){
-    scene=DayCareCheckerScene.new
-    screen=DayCareChecker.new(scene)
-    screen.startScreen
-  }
+ItemHandlers::UseInField.add(DayCareChecker::ITEM,proc { |item|
+  DayCareChecker.display
   next 1 # Continue
 })
 
-ItemHandlers::UseFromBag.add(DCCITEM,proc { |item|
-  pbFadeOutIn(99999){
-    scene=DayCareCheckerScene.new
-    screen=DayCareChecker.new(scene)
-    screen.startScreen
-  }
+ItemHandlers::UseFromBag.add(DayCareChecker::ITEM,proc { |item|
+  DayCareChecker.display
   next 1 # Continue
 })
