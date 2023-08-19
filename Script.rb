@@ -31,12 +31,18 @@
 #
 #  631,DAYCARESIGHT,DayCare Sight,8,0,"A visor that can be use to see Pokémon in Day-Care to monitor their growth.",2,0,6
 #
+#== NOTES =====================================================================
+#
+# If you are using Essentials version 19.1 or below, this script only displays
+# a generic egg graphic instead of species egg graphic (when the graphic
+# exists).
+#
 #===============================================================================
 
 if defined?(PluginManager) && !PluginManager.installed?("Day-Care Checker Item")
   PluginManager.register({                                                 
     :name    => "Day-Care Checker Item",                                        
-    :version => "1.1",                                                     
+    :version => "1.2",                                                     
     :link    => "https://www.pokecommunity.com/showthread.php?t=278209",             
     :credits => "FL"
   })
@@ -100,13 +106,13 @@ module DayCareChecker
       set_center_offset(@sprites["pokemon#{i}"])
       @sprites["pokemon#{i}"].x = i==0 ? 104 : Graphics.width-104
       @sprites["pokemon#{i}"].y = y
-      assing_pokemon_text(
+      assign_pokemon_text(
         i, _INTL("{1} Lv{2}",@pokemon_array[i].name,@pokemon_array[i].level), 
         @pokemon_array[i].gender, 20, 50, text_positions
       )
     end
 
-    def assing_pokemon_text(i, text, gender, x_padding, y, text_positions)
+    def assign_pokemon_text(i, text, gender, x_padding, y, text_positions)
       text_positions.push([
         text, text_x(i, gender, x_padding),
         y, i==1, Color.new(96, 96, 96),Color.new(168,184,184)
@@ -200,8 +206,10 @@ module DayCareChecker
     end
     
     def egg_path
-       return "Graphics/Battlers/egg" if MAJOR_VERSION < 19
-       return "Graphics/Pokemon/Eggs/000"
+      return "Graphics/Battlers/egg" if MAJOR_VERSION < 19
+      return "Graphics/Pokemon/Eggs/000" if MAJOR_VERSION == 19
+      egg = $PokemonGlobal.day_care.generate_egg
+      return GameData::Species.egg_sprite_filename(egg.species, egg.form)
     end
 
     def day_care_pokemon(index)
