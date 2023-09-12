@@ -9,7 +9,7 @@
 #== INSTALLATION ===============================================================
 #
 # To this script works, put it above main OR convert into a plugin. Put a 
-# 512x384 background in "Graphics/Pictures/day_care_checker_bg" and add into
+# 512x384 background in "Graphics/UI/day_care_checker_bg" and add into
 # PBS\items.txt:
 #
 # In Essentials version 20 or above:
@@ -42,7 +42,7 @@
 if defined?(PluginManager) && !PluginManager.installed?("Day-Care Checker Item")
   PluginManager.register({                                                 
     :name    => "Day-Care Checker Item",                                        
-    :version => "1.2",                                                     
+    :version => "1.2.1",                                                     
     :link    => "https://www.pokecommunity.com/showthread.php?t=278209",             
     :credits => "FL"
   })
@@ -57,6 +57,12 @@ module DayCareChecker
 
   # When true, only an egg shadow will be show.
   EGG_SHADOW = false
+
+  # When an egg is generated, cache it in save. Make this true only if you have
+  # different egg graphics between species that can have more than one 
+  # offspring (like Nidorans and Volbeat/Illumise). Only works in Essentials
+  # v20 or higher.
+  CACHE_EGG = false
 
   def self.display
     pbFadeOutIn(99999){
@@ -82,7 +88,7 @@ module DayCareChecker
       @sprites["overlay"].z = 1
       pbSetSystemFont(@sprites["overlay"].bitmap)
       @sprites["background"]=IconSprite.new(0,0,@viewport)
-      @sprites["background"].setBitmap("Graphics/Pictures/day_care_checker_bg")
+      @sprites["background"].setBitmap("Graphics/UI/day_care_checker_bg")
       @sprites["background"].x = (
         Graphics.width-@sprites["background"].bitmap.width
       )/2
@@ -208,7 +214,12 @@ module DayCareChecker
     def egg_path
       return "Graphics/Battlers/egg" if MAJOR_VERSION < 19
       return "Graphics/Pokemon/Eggs/000" if MAJOR_VERSION == 19
-      egg = $PokemonGlobal.day_care.generate_egg
+      if cache_egg?
+        $PokemonGlobal.day_care_egg ||= $PokemonGlobal.day_care.generate_egg
+        egg = $PokemonGlobal.day_care_egg
+      else
+        egg = $PokemonGlobal.day_care.generate_egg
+      end
       return GameData::Species.egg_sprite_filename(egg.species, egg.form)
     end
 
@@ -221,6 +232,34 @@ module DayCareChecker
     def day_care_has_egg?
       return Kernel.pbEggGenerated? if MAJOR_VERSION < 20
       return DayCare.egg_generated?
+    end
+
+    def cache_egg?
+      return MAJOR_VERSION >= 20 && CACHE_EGG
+    end
+  end
+end
+
+if DayCareChecker::Bridge.cache_egg?
+  class PokemonGlobalMetadata
+    attr_accessor :day_care_egg
+  end
+
+  class DayCare
+    def self.collect_egg
+      day_care = $PokemonGlobal.day_care
+      $PokemonGlobal.day_care_egg ||= day_care.generate_egg
+      egg = day_care.generate_egg
+      raise _INTL("Couldn't generate the egg.") if egg.nil?
+      raise _INTL("No room in party for egg.") if $player.party_full?
+      $player.party.push(egg)
+      day_care.reset_egg_counters
+    end
+  
+    alias :_reset_egg_counters_FL_checker :reset_egg_counters
+    def reset_egg_counters
+      $PokemonGlobal.day_care_egg = nil
+      _reset_egg_counters_FL_checker
     end
   end
 end
